@@ -201,3 +201,7 @@ details pre { max-height: 220px; overflow: auto; background: #090a10; padding: 8
 .guard-tok.wrong { border-color: var(--ng); background: #3a1f24; }
 .guard-tok[disabled] { opacity: 1; cursor: default; }
 .popup.guard-pop { color: var(--kw); }
+.reveal { border-top: 1px dashed #555a6e; margin-top: 8px; padding-top: 8px; font-size: 14px; }
+.reveal code { color: var(--ok); }
+.reveal .caret { font-size: 15px; margin: 4px 0; }
+.reveal p { margin: 4px 0 0; }

@@ -348,26 +348,26 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
   return enterFoe();
 }
 
-/** 敵のターン: 呪われた呪文（壊れた SQL）を撃ってくる。パーサーが止まる単語を当てれば防御成功 */
+/** 敵のターン: 呪われた呪文（1 か所壊した SQL）を撃ってくる。おかしい単語を当てれば防御成功 */
 async function enemyTurn(foe: Foe): Promise<void> {
   if (state.hp <= 0) return afterTurn();
   await sleep(500);
   const phase = foe.phases[state.phaseIndex];
   const cursed = pickCursedSpell(phase.answer);
   const tokens = tokenize(cursed.sql);
-  const answer = stopTokenIndex(tokens, cursed.error.offset);
+  const stop = stopTokenIndex(tokens, cursed.error.offset);
 
   await flash(".foe-sprite", "lunge", 350);
   await say([
     `<b class="foe-c">${esc(foe.name)}</b> は呪われた呪文を放った！`,
-    `パーサーはどこで読めなくなる？　崩れる単語を選んで防御しろ！`,
+    `どこか 1 か所が壊されている。<b>おかしい単語</b>を選んで防御しろ！`,
   ]);
   const box = $("#message");
   box.insertAdjacentHTML(
     "beforeend",
     `<div class="guard" id="guard">${tokens
       .map((t, i) => `<button class="guard-tok tok ${t.kind}" data-i="${i}"><b>${esc(t.text)}</b></button>`)
-      .join("")}<button class="guard-tok end" data-i="-1"><b>（終わり）</b></button></div>`,
+      .join("")}</div>`,
   );
   box.scrollTop = box.scrollHeight;
   const picked = await new Promise<number>((resolve) => {
@@ -376,29 +376,41 @@ async function enemyTurn(foe: Foe): Promise<void> {
       if (btn) resolve(Number(btn.dataset.i));
     });
   });
+  const hit = cursed.broken.includes(picked);
   $("#guard").querySelectorAll<HTMLButtonElement>(".guard-tok").forEach((b) => {
     b.disabled = true;
     const i = Number(b.dataset.i);
-    if (i === answer) b.classList.add("answer");
+    if (cursed.broken.includes(i)) b.classList.add("answer");
     else if (i === picked) b.classList.add("wrong");
   });
 
-  const stopWord = answer < 0 ? "呪文の終わり" : `「${esc(tokens[answer].text)}」`;
-  const readable = esc(cursed.sql.slice(0, cursed.error.offset).trim());
-  const explain = `<span class="muted">パーサーは「${readable || "（先頭）"}」までは文法として成り立つと読み進め、${stopWord}で行き詰まった。（${esc(cursed.how)}）</span>`;
-
-  $("#analysis").insertAdjacentHTML(
-    "beforeend",
-    `<h3>④ 敵の呪われた呪文</h3>${caretHtml(cursed.sql, cursed.error)}${expectedHtml(cursed.error)}<p class="muted">${esc(cursed.how)}</p>`,
-  );
-
-  if (picked === answer) {
+  if (hit) {
     popup("GUARD", "guard-pop");
-    await say([`<b class="win-c">見切った！</b> 呪文は ${stopWord} で崩れ落ちた。`, explain], { clear: false });
+    await say([`<b class="win-c">見切った！</b> ${esc(cursed.how)}。`], { clear: false });
   } else {
-    await say([`<span class="fail-c">見切れなかった！</span> 正しくは ${stopWord} で崩れる呪文だった。`, explain], { clear: false });
+    await say([`<span class="fail-c">見切れなかった！</span> ${esc(cursed.how)}。`], { clear: false });
     await damageHero(GUARD_FAIL, `${HERO_NAME} は <b class="fail-c">${GUARD_FAIL}</b> のダメージをうけた。`);
   }
+
+  // 答え合わせ: 元の呪文と、本物のパーサーが実際に止まった場所
+  const stopWord = stop < 0 ? "呪文の終わり" : `「${tokens[stop].text}」`;
+  const sameSpot = cursed.broken.includes(stop);
+  const reveal = `
+    <div class="reveal">
+      <div><span class="muted">元の呪文</span> <code>${esc(cursed.original)}</code></div>
+      <div><span class="muted">パーサーが止まった場所</span></div>
+      ${caretHtml(cursed.sql, cursed.error)}
+      <p class="muted">パーサーは「${esc(cursed.sql.slice(0, cursed.error.offset).trim()) || "（先頭）"}」までは文法として成り立つと読み進め、${esc(stopWord)}で行き詰まった。${
+        sameSpot ? "" : `<br><b class="note-c">壊れていたのは別の単語なのに、パーサーが困ったのは ${esc(stopWord)}。人が見た間違いと、パーサーが読めなくなる場所は、ずれることがある。</b>`
+      }</p>
+    </div>`;
+  box.insertAdjacentHTML("beforeend", reveal);
+  box.scrollTop = box.scrollHeight;
+  $("#analysis").insertAdjacentHTML(
+    "beforeend",
+    `<h3>④ 敵の呪われた呪文</h3><p class="muted">元の呪文：<code>${esc(cursed.original)}</code>　${esc(cursed.how)}</p>${caretHtml(cursed.sql, cursed.error)}${expectedHtml(cursed.error)}`,
+  );
+  await sleep(400);
   return afterTurn();
 }
 
