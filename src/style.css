@@ -1,0 +1,109 @@
+:root {
+  --bg: #14161c;
+  --panel: #1e212b;
+  --line: #333847;
+  --text: #e8e6e3;
+  --muted: #9aa0ad;
+  --kw: #7cb7ff;
+  --id: #f5c26b;
+  --sym: #c79bff;
+  --num: #7fe0a8;
+  --ok: #4ade80;
+  --ng: #f87171;
+  --warn: #fbbf24;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Hiragino Sans", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+}
+code, pre, textarea, .tok b { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+header { padding: 16px 24px; border-bottom: 1px solid var(--line); }
+h1 { margin: 0 0 4px; font-size: 22px; }
+h2 { font-size: 14px; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+h3 { margin: 12px 0; font-size: 16px; }
+.status { display: flex; gap: 24px; color: var(--muted); font-size: 14px; }
+#player-hp { display: flex; align-items: center; gap: 8px; margin-top: 8px; max-width: 360px; }
+.who { font-size: 13px; color: var(--muted); }
+.bar { position: relative; flex: 1; height: 18px; background: #2a2e3a; border-radius: 9px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--ok); transition: width .3s; }
+.bar span { position: absolute; inset: 0; text-align: center; font-size: 12px; line-height: 18px; }
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+  padding: 16px 24px;
+  max-width: 1100px;
+}
+main > section, main > aside { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.enemy, .cast, .result, .log { grid-column: 1; }
+.tables { grid-column: 2; grid-row: 1 / span 2; align-self: start; }
+.tables ul { padding-left: 18px; margin: 0; font-size: 13px; }
+.enemy-name { font-size: 20px; font-weight: 700; color: var(--ng); }
+.demand { font-size: 16px; margin: 6px 0 10px; }
+.parts { list-style: none; padding: 0; margin: 0; }
+.parts li { padding: 2px 0; }
+.parts .mark { display: inline-block; width: 22px; color: var(--muted); }
+.parts.judged .ok .mark { color: var(--ok); }
+.parts.judged .ng { color: var(--ng); }
+.parts.judged .ng .mark { color: var(--ng); }
+.muted { color: var(--muted); font-size: 13px; }
+.cast label { display: block; margin-bottom: 6px; }
+.cast small { color: var(--muted); }
+textarea {
+  width: 100%;
+  background: #0f1116;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 17px;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid var(--kw); }
+.suggest { min-height: 24px; margin: 4px 0; }
+.suggest span { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 6px; background: #2a2e3a; color: var(--kw); font-size: 13px; }
+button {
+  background: var(--kw);
+  color: #0f1116;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tokens { display: flex; flex-wrap: wrap; gap: 6px; }
+.tok { display: inline-flex; flex-direction: column; align-items: center; padding: 4px 10px; border-radius: 8px; background: #2a2e3a; border: 1px solid transparent; }
+.tok b { font-size: 15px; }
+.tok i { font-style: normal; font-size: 11px; color: var(--muted); }
+.tok.keyword b { color: var(--kw); }
+.tok.identifier b { color: var(--id); }
+.tok.symbol b { color: var(--sym); }
+.tok.number b, .tok.string b { color: var(--num); }
+.tok.stopped { border-color: var(--ng); background: #3a1f24; }
+.tree, .tree ul { list-style: none; margin: 0; padding-left: 18px; }
+.tree { padding-left: 0; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.tree li { border-left: 1px solid var(--line); padding-left: 10px; }
+.tree .k { color: var(--muted); margin-right: 6px; }
+.tree .v { color: var(--id); }
+details { margin-top: 8px; font-size: 13px; color: var(--muted); }
+details pre { max-height: 240px; overflow: auto; background: #0f1116; padding: 8px; border-radius: 6px; }
+.caret { background: #0f1116; padding: 10px; border-radius: 8px; font-size: 17px; white-space: pre-wrap; }
+.caret mark { background: var(--ng); color: #0f1116; border-radius: 3px; padding: 0 1px; }
+.fail { color: var(--ng); }
+.win { color: var(--ok); }
+.partial { color: var(--warn); }
+.note { border-left: 3px solid var(--warn); padding: 6px 10px; background: #2a2618; font-size: 14px; }
+.levelup h2 { color: var(--ok); font-size: 22px; margin-top: 0; }
+.gameover { margin-top: 12px; }
+.gameover h2 { color: var(--ng); font-size: 18px; }
+.log ol { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); }
+@media (max-width: 760px) {
+  main { grid-template-columns: 1fr; padding: 12px 16px; }
+  .tables { grid-column: 1; grid-row: auto; }
+}
