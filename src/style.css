@@ -184,3 +184,20 @@ details pre { max-height: 220px; overflow: auto; background: #090a10; padding: 8
   .foe-sprite { width: 140px; height: 140px; }
   .command, .book { grid-template-columns: 1fr; }
 }
+
+/* ---- 敵の HP（お題の数） ---- */
+.foe-hp { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+.foe-hp i { width: 22px; height: 6px; border-radius: 3px; background: #3a3f52; }
+.foe-hp i.on { background: var(--foe); }
+
+/* ---- 防御（呪われた呪文の見切り） ---- */
+.message { max-height: 340px; overflow-y: auto; }
+.guard { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.guard-tok { background: #2a2e3a; border: 2px solid #555a6e; color: var(--text); padding: 4px 12px; font-weight: normal; }
+.guard-tok:not([disabled]):hover { border-color: var(--warn); transform: translateY(-2px); }
+.guard-tok b { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 16px; }
+.guard-tok.end b { font-family: inherit; font-size: 13px; color: var(--muted); }
+.guard-tok.answer { border-color: var(--ok); background: #183324; }
+.guard-tok.wrong { border-color: var(--ng); background: #3a1f24; }
+.guard-tok[disabled] { opacity: 1; cursor: default; }
+.popup.guard-pop { color: var(--kw); }

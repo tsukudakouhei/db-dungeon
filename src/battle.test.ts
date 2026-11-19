@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { castSpell, completions, judge, pruneAst, tokenize } from "./battle";
 import { LV1_ENCOUNTERS, LV1_VOCABULARY } from "./encounters";
 
-const slime = LV1_ENCOUNTERS[0]; // users
+const slime = LV1_ENCOUNTERS[0].phases[0]; // users
 
 function cast(sql: string) {
   const r = castSpell(sql);
@@ -124,5 +124,15 @@ describe("pruneAst", () => {
       e: "x",
       f: [{ g: 1 }],
     });
+  });
+});
+
+describe("LV1_ENCOUNTERS", () => {
+  it("どの段階も、模範解答で倒せる", () => {
+    for (const foe of LV1_ENCOUNTERS) {
+      for (const phase of foe.phases) {
+        expect(judge(phase, cast(phase.answer)).defeated).toBe(true);
+      }
+    }
   });
 });

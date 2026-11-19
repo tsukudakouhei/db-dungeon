@@ -1,20 +1,23 @@
 import { castSpell, completions, judge, pruneAst, tokenize, type Judgement, type SpellError, type Token } from "./battle";
-import { LV1_ENCOUNTERS, LV1_VOCABULARY, NEXT_SPELL, TABLES, type Foe } from "./encounters";
+import { pickCursedSpell, stopTokenIndex } from "./attacks";
+import { LV1_ENCOUNTERS, LV1_VOCABULARY, NEXT_SPELL, TABLES, type Foe, type Phase } from "./encounters";
 import { HERO, spriteSvg } from "./sprites";
 
-const MAX_HP = 10;
+const MAX_HP = 20;
 const BACKFIRE = 3; // 呪文失敗（文法エラー）の反動
-const COUNTER = 1; // 部品が揃わず倒しきれなかったときの敵の反撃
+const GUARD_FAIL = 3; // 呪われた呪文を見切れなかったときのダメージ
 const HERO_NAME = "見習い魔導士";
 
 interface State {
   hp: number;
   enemyIndex: number;
+  /** いまの敵の何番目のお題か */
+  phaseIndex: number;
   wins: number;
   busy: boolean;
 }
 
-const state: State = { hp: MAX_HP, enemyIndex: 0, wins: 0, busy: false };
+const state: State = { hp: MAX_HP, enemyIndex: 0, phaseIndex: 0, wins: 0, busy: false };
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const $ = <T extends Element = HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -109,8 +112,13 @@ function renderParty(): void {
   $("#exp-num").textContent = `${state.wins}/${LV1_ENCOUNTERS.length}`;
 }
 
-function renderRunes(foe: Foe, results?: boolean[]): void {
-  $("#runes").innerHTML = foe.parts
+function renderFoeHp(foe: Foe): void {
+  const left = foe.phases.length - state.phaseIndex;
+  $("#foe-hp").innerHTML = foe.phases.map((_, i) => `<i class="${i < left ? "on" : ""}"></i>`).join("");
+}
+
+function renderRunes(phase: Phase, results?: boolean[]): void {
+  $("#runes").innerHTML = phase.parts
     .map((p, i) => {
       const r = results?.[i];
       const cls = r === undefined ? "" : r ? "lit" : "miss";
@@ -126,12 +134,14 @@ async function say(lines: string[], opts: { clear?: boolean } = {}): Promise<voi
   for (const line of lines) {
     const p = document.createElement("p");
     box.appendChild(p);
+    box.scrollTop = box.scrollHeight;
     const plain = line.replace(/<[^>]+>/g, "");
     for (let i = 1; i <= plain.length; i += 2) {
       p.textContent = plain.slice(0, i);
       await sleep(18);
     }
     p.innerHTML = line; // 最後に装飾付きで確定
+    box.scrollTop = box.scrollHeight;
     await sleep(260);
   }
 }
@@ -157,10 +167,12 @@ function flash(selector: string, cls: string, ms = 450): Promise<void> {
 async function enterFoe(): Promise<void> {
   const foe = LV1_ENCOUNTERS[state.enemyIndex];
   if (!foe) return levelUp();
-  $("#foe").innerHTML = `${spriteSvg(foe.sprite, "foe-sprite enter")}<div class="foe-name">${esc(foe.name)}</div>`;
-  renderRunes(foe);
-  await say([`<b class="foe-c">${esc(foe.name)}</b> があらわれた！`, `「${esc(foe.demand)}」`]);
-  await say(["1 回の呪文で、上の 3 つの部品を全部そろえると倒せる。"], { clear: false });
+  const phase = foe.phases[0];
+  $("#foe").innerHTML = `${spriteSvg(foe.sprite, "foe-sprite enter")}<div class="foe-name">${esc(foe.name)}</div><div class="foe-hp" id="foe-hp"></div>`;
+  renderFoeHp(foe);
+  renderRunes(phase);
+  await say([`<b class="foe-c">${esc(foe.name)}</b> があらわれた！`, `「${esc(phase.demand)}」`]);
+  await say([`お題は ${foe.phases.length} つ。1 回の呪文で上の部品を全部そろえると、お題を 1 つくずせる。`], { clear: false });
   $<HTMLTextAreaElement>("#spell").focus();
 }
 
@@ -228,17 +240,31 @@ function unknownTables(ast: { from?: { table?: string | null }[] | null }): stri
 async function onCast(sql: string): Promise<void> {
   const foe = LV1_ENCOUNTERS[state.enemyIndex];
   if (!foe || state.hp <= 0 || state.busy) return;
-  state.busy = true;
-  $("#cast-btn").setAttribute("disabled", "");
+  setBusy(true);
   try {
     await runTurn(foe, sql);
   } finally {
-    state.busy = false;
-    $("#cast-btn").removeAttribute("disabled");
+    setBusy(false);
   }
 }
 
+function setBusy(busy: boolean): void {
+  state.busy = busy;
+  $("#cast-btn").toggleAttribute("disabled", busy);
+  $<HTMLTextAreaElement>("#spell").toggleAttribute("readonly", busy);
+}
+
+async function damageHero(amount: number, line: string): Promise<void> {
+  state.hp = Math.max(0, state.hp - amount);
+  renderParty();
+  popup(`-${amount}`, "dmg-hero");
+  await flash(".game", "shake", 450);
+  await say([line], { clear: false });
+}
+
+/** 自分のターン: 呪文を唱えてお題の木と照合する */
 async function runTurn(foe: Foe, sql: string): Promise<void> {
+  const phase = foe.phases[state.phaseIndex];
   const spell = sql.trim();
   const result = castSpell(sql);
   const analysis = $("#analysis");
@@ -255,15 +281,11 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
     const where = result.error.found === null ? "呪文の終わり" : `「${esc(result.error.found)}」`;
     await say([`しかし呪文は ${where} で途切れた！`], { clear: false });
     $("#message").insertAdjacentHTML("beforeend", caretHtml(sql, result.error));
-    state.hp = Math.max(0, state.hp - BACKFIRE);
-    renderParty();
-    popup(`-${BACKFIRE}`, "dmg-hero");
-    await flash(".game", "shake", 450);
-    await say([`呪文の反動！ ${HERO_NAME} は <b class="fail-c">${BACKFIRE}</b> のダメージをうけた。`], { clear: false });
-    return afterTurn();
+    await damageHero(BACKFIRE, `呪文の反動！ ${HERO_NAME} は <b class="fail-c">${BACKFIRE}</b> のダメージをうけた。`);
+    return enemyTurn(foe);
   }
 
-  const j = judge(foe, result.ast);
+  const j = judge(phase, result.ast);
   analysis.innerHTML = `
     <h3>① 単語に分ける（字句解析）</h3><div class="tokens">${tokensHtml(tokenize(sql))}</div>
     <h3>② 構文木を組む（構文解析 ── node-sql-parser の本物の出力）</h3>
@@ -275,10 +297,9 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
 
   // 部品ごとに 1 発ずつ当てる
   const results: boolean[] = [];
-  for (let i = 0; i < j.parts.length; i++) {
-    const { part, ok } = j.parts[i];
+  for (const { part, ok } of j.parts) {
     results.push(ok);
-    renderRunes(foe, [...results]);
+    renderRunes(phase, [...results]);
     if (ok) {
       popup("HIT", "hit");
       await flash(".foe-sprite", "hurt", 380);
@@ -297,31 +318,94 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
     );
   }
 
-  if (j.defeated) {
-    $(".foe-sprite").classList.add("defeated");
-    await sleep(600);
-    state.wins++;
-    state.enemyIndex++;
-    renderParty();
-    $<HTMLTextAreaElement>("#spell").value = "";
-    $("#suggest").innerHTML = "";
-    await say([`<b class="win-c">${esc(foe.name)} をたおした！</b>　経験値を 1 かくとく。`]);
-    await sleep(700);
-    return enterFoe();
+  if (!j.defeated) {
+    await say([`${esc(foe.name)}「${esc(foe.taunt)}」`], { clear: false });
+    return enemyTurn(foe);
   }
 
-  await say([`${esc(foe.name)}「${esc(foe.taunt)}」`], { clear: false });
-  await flash(".foe-sprite", "lunge", 350);
-  state.hp = Math.max(0, state.hp - COUNTER);
+  // お題を 1 つ倒した
+  state.phaseIndex++;
+  renderFoeHp(foe);
+  $<HTMLTextAreaElement>("#spell").value = "";
+  $("#suggest").innerHTML = "";
+
+  if (state.phaseIndex < foe.phases.length) {
+    const next = foe.phases[state.phaseIndex];
+    await say([`<b class="win-c">お題をくずした！</b> ${esc(foe.name)} は形を変えた！`, `「${esc(next.demand)}」`], { clear: false });
+    renderRunes(next);
+    await sleep(500);
+    return enemyTurn(foe);
+  }
+
+  $(".foe-sprite").classList.add("defeated");
+  await sleep(600);
+  state.wins++;
+  state.enemyIndex++;
+  state.phaseIndex = 0;
   renderParty();
-  popup(`-${COUNTER}`, "dmg-hero");
-  await flash(".game", "shake", 300);
-  await say([`${esc(foe.name)} の反撃！ ${HERO_NAME} は ${COUNTER} のダメージをうけた。`], { clear: false });
+  await say([`<b class="win-c">${esc(foe.name)} をたおした！</b>　経験値を 1 かくとく。`]);
+  await sleep(700);
+  return enterFoe();
+}
+
+/** 敵のターン: 呪われた呪文（壊れた SQL）を撃ってくる。パーサーが止まる単語を当てれば防御成功 */
+async function enemyTurn(foe: Foe): Promise<void> {
+  if (state.hp <= 0) return afterTurn();
+  await sleep(500);
+  const phase = foe.phases[state.phaseIndex];
+  const cursed = pickCursedSpell(phase.answer);
+  const tokens = tokenize(cursed.sql);
+  const answer = stopTokenIndex(tokens, cursed.error.offset);
+
+  await flash(".foe-sprite", "lunge", 350);
+  await say([
+    `<b class="foe-c">${esc(foe.name)}</b> は呪われた呪文を放った！`,
+    `パーサーはどこで読めなくなる？　崩れる単語を選んで防御しろ！`,
+  ]);
+  const box = $("#message");
+  box.insertAdjacentHTML(
+    "beforeend",
+    `<div class="guard" id="guard">${tokens
+      .map((t, i) => `<button class="guard-tok tok ${t.kind}" data-i="${i}"><b>${esc(t.text)}</b></button>`)
+      .join("")}<button class="guard-tok end" data-i="-1"><b>（終わり）</b></button></div>`,
+  );
+  box.scrollTop = box.scrollHeight;
+  const picked = await new Promise<number>((resolve) => {
+    $("#guard").addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".guard-tok");
+      if (btn) resolve(Number(btn.dataset.i));
+    });
+  });
+  $("#guard").querySelectorAll<HTMLButtonElement>(".guard-tok").forEach((b) => {
+    b.disabled = true;
+    const i = Number(b.dataset.i);
+    if (i === answer) b.classList.add("answer");
+    else if (i === picked) b.classList.add("wrong");
+  });
+
+  const stopWord = answer < 0 ? "呪文の終わり" : `「${esc(tokens[answer].text)}」`;
+  const readable = esc(cursed.sql.slice(0, cursed.error.offset).trim());
+  const explain = `<span class="muted">パーサーは「${readable || "（先頭）"}」までは文法として成り立つと読み進め、${stopWord}で行き詰まった。（${esc(cursed.how)}）</span>`;
+
+  $("#analysis").insertAdjacentHTML(
+    "beforeend",
+    `<h3>④ 敵の呪われた呪文</h3>${caretHtml(cursed.sql, cursed.error)}${expectedHtml(cursed.error)}<p class="muted">${esc(cursed.how)}</p>`,
+  );
+
+  if (picked === answer) {
+    popup("GUARD", "guard-pop");
+    await say([`<b class="win-c">見切った！</b> 呪文は ${stopWord} で崩れ落ちた。`, explain], { clear: false });
+  } else {
+    await say([`<span class="fail-c">見切れなかった！</span> 正しくは ${stopWord} で崩れる呪文だった。`, explain], { clear: false });
+    await damageHero(GUARD_FAIL, `${HERO_NAME} は <b class="fail-c">${GUARD_FAIL}</b> のダメージをうけた。`);
+  }
   return afterTurn();
 }
 
 async function afterTurn(): Promise<void> {
   if (state.hp > 0) {
+    const phase = LV1_ENCOUNTERS[state.enemyIndex]?.phases[state.phaseIndex];
+    if (phase) await say([`<b>いまのお題：</b>「${esc(phase.demand)}」`], { clear: false });
     $<HTMLTextAreaElement>("#spell").focus();
     return;
   }
@@ -333,6 +417,7 @@ async function afterTurn(): Promise<void> {
 async function restart(): Promise<void> {
   state.hp = MAX_HP;
   state.enemyIndex = 0;
+  state.phaseIndex = 0;
   state.wins = 0;
   state.busy = false;
   renderShell();

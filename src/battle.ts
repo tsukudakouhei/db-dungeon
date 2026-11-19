@@ -118,11 +118,8 @@ export interface Part {
   check: (ast: SelectLike) => boolean;
 }
 
-export interface Encounter {
-  id: string;
-  name: string;
-  /** 敵が突きつけてくるお題 */
-  demand: string;
+/** 照合の相手（お題）。部品がすべて合えば倒せる */
+export interface Target {
   parts: Part[];
 }
 
@@ -133,8 +130,8 @@ export interface Judgement {
   defeated: boolean;
 }
 
-export function judge(encounter: Encounter, ast: SelectLike): Judgement {
-  const parts = encounter.parts.map((part) => {
+export function judge(target: Target, ast: SelectLike): Judgement {
+  const parts = target.parts.map((part) => {
     let ok = false;
     try {
       ok = part.check(ast);
@@ -144,7 +141,7 @@ export function judge(encounter: Encounter, ast: SelectLike): Judgement {
     return { part, ok };
   });
   const damage = parts.filter((p) => p.ok).length;
-  return { parts, damage, defeated: damage === encounter.parts.length };
+  return { parts, damage, defeated: damage === target.parts.length };
 }
 
 // ---- 部品の判定ヘルパー -----------------------------------------------------
