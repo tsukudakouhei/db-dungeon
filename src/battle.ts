@@ -158,6 +158,18 @@ export function selectsAllColumns(ast: SelectLike): boolean {
   return cols[0].expr?.type === "column_ref" && cols[0].expr.column === "*";
 }
 
+/** 列がちょうどこの並びか（大文字小文字は区別しない。構文木の列の並びは結果の列の並びになるので順番も見る） */
+export function selectsColumns(ast: SelectLike, columns: string[]): boolean {
+  const cols = ast.columns;
+  if (!Array.isArray(cols) || cols.length !== columns.length) return false;
+  return cols.every((c, i) => {
+    if (c.expr?.type !== "column_ref") return false;
+    const raw = c.expr.column;
+    const name = typeof raw === "string" ? raw : raw?.expr?.value;
+    return (name ?? "").toLowerCase() === columns[i].toLowerCase();
+  });
+}
+
 /** FROM がちょうどこのテーブル 1 つか（大文字小文字は区別しない） */
 export function fromTable(ast: SelectLike, table: string): boolean {
   const from = ast.from;

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { castSpell, completions, judge, pruneAst, tokenize } from "./battle";
-import { LV1_ENCOUNTERS, LV1_VOCABULARY } from "./encounters";
+import { brokenMutations } from "./attacks";
+import { LEVELS } from "./encounters";
 
-const slime = LV1_ENCOUNTERS[0].phases[0]; // users
+const LV1_VOCABULARY = LEVELS[0].vocabulary;
+
+const slime = LEVELS[0].foes[0].phases[0]; // users の SELECT *
 
 function cast(sql: string) {
   const r = castSpell(sql);
@@ -127,12 +130,50 @@ describe("pruneAst", () => {
   });
 });
 
-describe("LV1_ENCOUNTERS", () => {
+describe("LEVELS", () => {
+  const allPhases = LEVELS.flatMap((l) => l.foes.flatMap((f) => f.phases));
+
   it("どの段階も、模範解答で倒せる", () => {
-    for (const foe of LV1_ENCOUNTERS) {
-      for (const phase of foe.phases) {
-        expect(judge(phase, cast(phase.answer)).defeated).toBe(true);
+    for (const p of allPhases) expect(judge(p, cast(p.answer)).defeated).toBe(true);
+  });
+
+  it("どの段階の模範解答も、壊して攻撃や fix のお題に使える", () => {
+    for (const p of allPhases) expect(brokenMutations(p.answer).length).toBeGreaterThan(3);
+  });
+
+  it("1 つのレベルに 2 種類以上のやること（書く・読む・直す）がある", () => {
+    for (const l of LEVELS) {
+      const kinds = new Set(l.foes.flatMap((f) => f.phases.map((p) => p.kind)));
+      expect(kinds.size).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("Lv2 には Lv1 の文法（SELECT *）の復習が混ざる", () => {
+    expect(LEVELS[1].foes.flatMap((f) => f.phases).some((p) => p.answer.includes("*"))).toBe(true);
+  });
+
+  it("模範解答の単語は、そのレベルの補完の語彙に入っている", () => {
+    for (const l of LEVELS) {
+      for (const p of l.foes.flatMap((f) => f.phases)) {
+        for (const w of p.answer.split(/[\s,]+/).filter((w) => /^[A-Za-z_]+$/.test(w))) {
+          expect(l.vocabulary).toContain(w);
+        }
       }
     }
+  });
+});
+
+describe("selectsColumns", () => {
+  it("列の並びが一致すれば真", async () => {
+    const { selectsColumns } = await import("./battle");
+    expect(selectsColumns(cast("SELECT name, age FROM users"), ["name", "age"])).toBe(true);
+    expect(selectsColumns(cast("SELECT NAME FROM users"), ["name"])).toBe(true);
+  });
+
+  it("並びが違う・数が違う・* は偽", async () => {
+    const { selectsColumns } = await import("./battle");
+    expect(selectsColumns(cast("SELECT age, name FROM users"), ["name", "age"])).toBe(false);
+    expect(selectsColumns(cast("SELECT name FROM users"), ["name", "age"])).toBe(false);
+    expect(selectsColumns(cast("SELECT * FROM users"), ["name"])).toBe(false);
   });
 });

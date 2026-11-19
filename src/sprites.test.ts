@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BAT, GOBLIN, HERO, SLIME, spriteSvg, type Sprite } from "./sprites";
+import { BAT, GOBLIN, GOLEM, HERO, MIMIC, SLIME, spriteSvg, type Sprite } from "./sprites";
 
-const all: [string, Sprite][] = [["HERO", HERO], ["SLIME", SLIME], ["GOBLIN", GOBLIN], ["BAT", BAT]];
+const all: [string, Sprite][] = [["HERO", HERO], ["SLIME", SLIME], ["GOBLIN", GOBLIN], ["BAT", BAT], ["GOLEM", GOLEM], ["MIMIC", MIMIC]];
 
 describe("sprites", () => {
   it.each(all)("%s は 16x16 で、使う文字がすべてパレットにある", (_, s) => {

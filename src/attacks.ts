@@ -26,7 +26,14 @@ type Candidate = Omit<CursedSpell, "error">;
 export function mutations(sql: string): Candidate[] {
   const tokens = tokenize(sql);
   const out: Candidate[] = [];
-  const replaced = (i: number, text: string) => tokens.map((t, j) => (j === i ? text : t.text)).join(" ");
+  // 元の文字列の該当箇所だけを書き換え、空白の付き方は元のまま残す
+  const replaced = (i: number, text: string) =>
+    sql.slice(0, tokens[i].start) + text + sql.slice(tokens[i].start + tokens[i].text.length);
+  const duplicated = (i: number) => {
+    const end = tokens[i].start + tokens[i].text.length;
+    const gap = tokens[i].text === "," ? "" : " ";
+    return sql.slice(0, end) + gap + tokens[i].text + sql.slice(end);
+  };
 
   tokens.forEach((t, i) => {
     const base = { original: sql, target: t.text.toUpperCase() };
@@ -48,7 +55,7 @@ export function mutations(sql: string): Candidate[] {
     // 同じ単語を 2 回続ける（どちらを選んでも正解）
     out.push({
       ...base,
-      sql: tokens.flatMap((x, j) => (j === i ? [x.text, x.text] : [x.text])).join(" "),
+      sql: duplicated(i),
       broken: [i, i + 1],
       how: `「${t.text}」が 2 回続いている`,
     });

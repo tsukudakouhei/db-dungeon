@@ -33,6 +33,13 @@ describe("mutations", () => {
     }
   });
 
+  it("空白の付き方は元の呪文のまま（, の前に空白を入れない）", () => {
+    const sqls = mutations("SELECT name, age FROM users").map((m) => m.sql);
+    expect(sqls).toContain("SELECT name,, age FROM users");
+    expect(sqls).toContain("SELECT name, age FORM users");
+    for (const s of sqls) expect(s).not.toMatch(/ ,/);
+  });
+
   it("同じ候補は 1 回だけ", () => {
     const sqls = mutations(BASE).map((m) => m.sql);
     expect(new Set(sqls).size).toBe(sqls.length);

@@ -93,6 +93,50 @@ export const BAT: Sprite = {
   ],
 };
 
+export const GOLEM: Sprite = {
+  palette: { K: "#1c1f26", S: "#8d93a3", D: "#5c6170", C: "#5ee6ff" },
+  rows: [
+    "................",
+    "....KKKKKKKK....",
+    "...KSSSSSSSSK...",
+    "...KSCSSSSCSK...",
+    "...KSSSSSSSSK...",
+    "...KSSKKKKSSK...",
+    ".KKKKSSSSSSKKKK.",
+    "KSSSKSSSSSSKSSSK",
+    "KSSSKSDSSDSKSSSK",
+    "KSSSKSSSSSSKSSSK",
+    "KKKKKSSSSSSKKKKK",
+    "....KSSKKSSK....",
+    "....KSSKKSSK....",
+    "...KSSSKKSSSK...",
+    "...KKKKKKKKKK...",
+    "................",
+  ],
+};
+
+export const MIMIC: Sprite = {
+  palette: { K: "#1f1408", B: "#a0662d", G: "#f2c14e", W: "#fff7e6", D: "#2b0f12", Y: "#ffe066", R: "#e0465a" },
+  rows: [
+    "................",
+    "................",
+    "...KKKKKKKKKK...",
+    "..KBBBBBBBBBBK..",
+    "..KBGBBBBBBGBK..",
+    "..KGGGGGGGGGGK..",
+    "..KWKWKWKWKWKK..",
+    "..KDDYDDDDYDDK..",
+    "..KDDDRRRRDDDK..",
+    "..KWKWKWKWKWKK..",
+    "..KBBBBGGBBBBK..",
+    "..KBBBBGGBBBBK..",
+    "..KBBBBBBBBBBK..",
+    "...KKKKKKKKKK...",
+    "................",
+    "................",
+  ],
+};
+
 /** ドット絵を SVG 文字列にする（同じ色の横並びはまとめて 1 本の rect にする） */
 export function spriteSvg(sprite: Sprite, className = ""): string {
   const rects: string[] = [];

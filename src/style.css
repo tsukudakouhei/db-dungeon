@@ -205,3 +205,13 @@ details pre { max-height: 220px; overflow: auto; background: #090a10; padding: 8
 .reveal code { color: var(--ok); }
 .reveal .caret { font-size: 15px; margin: 4px 0; }
 .reveal p { margin: 4px 0 0; }
+
+/* ---- お題の窓 ---- */
+.challenge { margin-top: 12px; }
+.challenge .demand { margin: 6px 0; font-size: 16px; }
+.challenge .target-tree { background: #090a10; border-radius: 6px; padding: 8px 12px; }
+.challenge .cursed { margin: 4px 0 0; color: var(--sym); }
+.kind { display: inline-block; font-size: 12px; padding: 1px 10px; border-radius: 999px; font-weight: 700; }
+.kind-write { background: #1d3557; color: var(--kw); }
+.kind-tree { background: #2c3340; color: #c9d1e0; }
+.kind-fix { background: #3b2a12; color: var(--warn); }
