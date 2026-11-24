@@ -284,7 +284,12 @@ function expectedHtml(error: SpellError): string {
 
 function judgementHtml(j: Judgement): string {
   return `<ul class="judged">${j.parts
-    .map(({ part, ok }) => `<li class="${ok ? "ok" : "ng"}"><span class="mark">${ok ? "✓" : "✗"}</span>${esc(part.label)}</li>`)
+    .map(
+      ({ part, ok, hint }) =>
+        `<li class="${ok ? "ok" : "ng"}"><span class="mark">${ok ? "✓" : "✗"}</span>${esc(part.label)}${
+          hint ? `<div class="hint">${esc(hint)}</div>` : ""
+        }</li>`,
+    )
     .join("")}</ul>`;
 }
 
@@ -355,7 +360,7 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
 
   // 部品ごとに 1 発ずつ当てる
   const results: boolean[] = [];
-  for (const { part, ok } of j.parts) {
+  for (const { part, ok, hint } of j.parts) {
     results.push(ok);
     renderRunes(phase, [...results]);
     if (ok) {
@@ -365,6 +370,7 @@ async function runTurn(foe: Foe, sql: string): Promise<void> {
       popup("MISS", "miss");
       await sleep(380);
       await say([`<span class="fail-c">✗ ${esc(part.label)}</span> がそろっていない`], { clear: false });
+      if (hint) await say([`<span class="note-c">惜しい：${esc(hint)}</span>`], { clear: false });
     }
   }
 
