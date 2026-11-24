@@ -116,6 +116,8 @@ export interface Part {
   /** 画面に出す部品名（例: 文の種類が SELECT） */
   label: string;
   check: (ast: SelectLike) => boolean;
+  /** 合わなかったときに、どこが惜しいかを説明する（説明できないときは null） */
+  hint?: (ast: SelectLike) => string | null;
 }
 
 /** 照合の相手（お題）。部品がすべて合えば倒せる */
@@ -124,7 +126,8 @@ export interface Target {
 }
 
 export interface Judgement {
-  parts: { part: Part; ok: boolean }[];
+  /** hint は合わなかった部品にだけ付く */
+  parts: { part: Part; ok: boolean; hint?: string }[];
   /** 合った部品の数 */
   damage: number;
   defeated: boolean;
@@ -138,7 +141,14 @@ export function judge(target: Target, ast: SelectLike): Judgement {
     } catch {
       ok = false;
     }
-    return { part, ok };
+    if (ok || !part.hint) return { part, ok };
+    let hint: string | null = null;
+    try {
+      hint = part.hint(ast);
+    } catch {
+      hint = null;
+    }
+    return hint ? { part, ok, hint } : { part, ok };
   });
   const damage = parts.filter((p) => p.ok).length;
   return { parts, damage, defeated: damage === target.parts.length };
@@ -175,6 +185,105 @@ export function fromTable(ast: SelectLike, table: string): boolean {
   const from = ast.from;
   if (!Array.isArray(from) || from.length !== 1) return false;
   return (from[0].table ?? "").toLowerCase() === table.toLowerCase();
+}
+
+// ---- WHERE（条件）の判定 ----------------------------------------------------
+
+/** 比較の条件 1 つ（列 演算子 値）。構文木では左辺・演算子・右辺の二分木になる */
+export interface Condition {
+  column: string;
+  op: "=" | "<>" | "<" | "<=" | ">" | ">=";
+  /** 数なら number、文字列なら string（構文木では別の種類になる） */
+  value: number | string;
+}
+
+interface ExprNode {
+  type?: string;
+  operator?: string;
+  left?: ExprNode;
+  right?: ExprNode;
+  column?: string | { expr?: { value?: string } };
+  value?: unknown;
+}
+
+/** 左右を入れ替えたときに、意味が同じになる演算子 */
+const MIRROR: Record<string, string> = { "=": "=", "<>": "<>", "<": ">", "<=": ">=", ">": "<", ">=": "<=" };
+
+/** 意味は同じだが綴りの違う演算子（構文木では別の operator になる） */
+const SYNONYM: Record<string, string> = { "!=": "<>", "==": "=" };
+
+/** 綴りの違いをならした演算子（説明を出すときだけ使う。照合はならさない） */
+function normalOp(op: string | undefined): string | undefined {
+  return op === undefined ? undefined : (SYNONYM[op] ?? op);
+}
+
+function columnName(node: ExprNode | undefined): string | null {
+  if (node?.type !== "column_ref") return null;
+  const raw = node.column;
+  const name = typeof raw === "string" ? raw : raw?.expr?.value;
+  return name ? name.toLowerCase() : null;
+}
+
+/**
+ * 値の部品が、お題の値と同じ種類・同じ値か（文字列は '...' で書いたものだけ）。
+ * 20.0 は構文木では "20.0" のまま残り、20 とは別の木なので一致させない
+ */
+function sameValue(node: ExprNode | undefined, value: number | string): boolean {
+  if (typeof value === "number") return node?.type === "number" && node.value === value;
+  return node?.type === "single_quote_string" && node.value === value;
+}
+
+/** 値を SQL の書き方にする（文字列は ' で囲む） */
+export function literalText(value: number | string): string {
+  return typeof value === "number" ? String(value) : `'${value}'`;
+}
+
+/** 条件の木が「左辺＝列、演算子、右辺＝値」の形でお題とちょうど一致するか */
+export function whereIs(ast: SelectLike, cond: Condition): boolean {
+  const w = ast.where as ExprNode | null | undefined;
+  return (
+    w?.type === "binary_expr" &&
+    w.operator === cond.op &&
+    columnName(w.left) === cond.column.toLowerCase() &&
+    sameValue(w.right, cond.value)
+  );
+}
+
+/**
+ * 条件が合わなかったとき、どこが惜しいかを説明する。
+ * パーサーは意味を知らないので、意味が同じでも木の形が違えば別物として扱う。
+ */
+export function whereHint(ast: SelectLike, cond: Condition): string | null {
+  const w = ast.where as ExprNode | null | undefined;
+  if (!w) return "WHERE がない。条件で絞らないと、構文木に where の枝ができない";
+  if (w.type !== "binary_expr") return null;
+  if (w.operator === "AND" || w.operator === "OR") return "条件は 1 つだけ。AND / OR で組み合わせるのは次のレベル";
+  const want = `${cond.column} ${cond.op} ${literalText(cond.value)}`;
+
+  // 左右が入れ替わっている（20 <= age）
+  if (columnName(w.right) === cond.column.toLowerCase() && sameValue(w.left, cond.value) && normalOp(w.operator) === MIRROR[cond.op]) {
+    return `意味は「${want}」と同じ。でも構文木では左右が入れ替わった別の木になる。パーサーは意味を知らず、形だけを見る（意味が同じかを考えるのは、もっと下の階の仕事）`;
+  }
+  if (columnName(w.left) !== cond.column.toLowerCase()) return null;
+
+  const right = w.right;
+  if (right?.type === "double_quote_string" && right.value === String(cond.value)) {
+    const want = typeof cond.value === "number" ? String(cond.value) : `'${cond.value}'`;
+    return `"${right.value}" のように " で囲むのは、SQL の決まりでは名前（列名など）の書き方。ここは ${want} と書く`;
+  }
+  if (typeof cond.value === "number" && right?.type === "single_quote_string" && Number(right.value) === cond.value) {
+    return `数の ${cond.value} と 文字列の '${cond.value}' は、構文木では別の種類（number と string）になる`;
+  }
+  if (typeof cond.value === "number" && right?.type === "number" && right.value !== cond.value && Number(right.value) === cond.value) {
+    return `${String(right.value)} と ${cond.value} は、数としては同じでも構文木には書いたとおりの "${String(right.value)}" が残る。パーサーは形だけを見る`;
+  }
+  if (sameValue(right, cond.value) && normalOp(w.operator) === cond.op) {
+    return `${w.operator} と ${cond.op} は意味は同じ。でも構文木では operator の中身が違う別の木になる。このお題は ${cond.op} で書く`;
+  }
+  if (sameValue(right, cond.value) && w.operator !== cond.op) {
+    return `演算子が違う。${w.operator} と ${cond.op} は、構文木では別の木になる`;
+  }
+  return null;
 }
 
 // ---- 入力補完 ---------------------------------------------------------------

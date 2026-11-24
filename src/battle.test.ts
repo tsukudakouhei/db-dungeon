@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { castSpell, completions, judge, pruneAst, tokenize } from "./battle";
+import { castSpell, completions, judge, pruneAst, tokenize, whereHint, whereIs } from "./battle";
 import { brokenMutations } from "./attacks";
 import { LEVELS } from "./encounters";
 
@@ -175,5 +175,70 @@ describe("selectsColumns", () => {
     expect(selectsColumns(cast("SELECT age, name FROM users"), ["name", "age"])).toBe(false);
     expect(selectsColumns(cast("SELECT name FROM users"), ["name", "age"])).toBe(false);
     expect(selectsColumns(cast("SELECT * FROM users"), ["name"])).toBe(false);
+  });
+});
+
+describe("WHERE（Lv3）", () => {
+  const age20 = { column: "age", op: ">=", value: 20 } as const;
+  const alice = { column: "name", op: "=", value: "alice" } as const;
+  const hint = (sql: string, cond: Parameters<typeof whereHint>[1]) => whereHint(cast(sql), cond);
+
+  it("列 演算子 値 の形でちょうど一致すれば真（列名の大文字小文字は区別しない）", () => {
+    expect(whereIs(cast("SELECT * FROM users WHERE age >= 20"), age20)).toBe(true);
+    expect(whereIs(cast("SELECT * FROM users WHERE AGE >= 20"), age20)).toBe(true);
+    expect(whereIs(cast("SELECT * FROM users WHERE name = 'alice'"), alice)).toBe(true);
+  });
+
+  it("意味が同じでも、左右を入れ替えた木は別物（理由も出す）", () => {
+    expect(whereIs(cast("SELECT * FROM users WHERE 20 <= age"), age20)).toBe(false);
+    expect(hint("SELECT * FROM users WHERE 20 <= age", age20)).toContain("左右が入れ替わった");
+  });
+
+  it("左右を入れ替えて意味も変わったもの（20 >= age）は、入れ替えの説明を出さない", () => {
+    expect(hint("SELECT * FROM users WHERE 20 >= age", age20)).toBeNull();
+  });
+
+  it("数の 20 と文字列の '20' は別の種類", () => {
+    expect(whereIs(cast("SELECT * FROM users WHERE age >= '20'"), age20)).toBe(false);
+    expect(hint("SELECT * FROM users WHERE age >= '20'", age20)).toContain("number と string");
+  });
+
+  it("\"alice\" は名前の書き方なので外れ、' で囲むよう説明する", () => {
+    expect(whereIs(cast('SELECT * FROM users WHERE name = "alice"'), alice)).toBe(false);
+    expect(hint('SELECT * FROM users WHERE name = "alice"', alice)).toContain("ここは 'alice' と書く");
+  });
+
+  it("演算子が違えば外れる", () => {
+    expect(whereIs(cast("SELECT * FROM users WHERE age > 20"), age20)).toBe(false);
+    expect(hint("SELECT * FROM users WHERE age > 20", age20)).toContain("演算子が違う");
+  });
+
+  it("WHERE がない・AND で組み合わせた、も説明する", () => {
+    expect(hint("SELECT * FROM users", age20)).toContain("WHERE がない");
+    expect(hint("SELECT * FROM users WHERE age >= 20 AND id = 1", age20)).toContain("次のレベル");
+  });
+
+  it("judge は外れた部品にだけ hint を付ける", () => {
+    const p = LEVELS[2].foes[0].phases[0]; // users WHERE age >= 20
+    const j = judge(p, cast("SELECT * FROM users WHERE 20 <= age"));
+    expect(j.parts.find((x) => x.part.id === "where")?.hint).toContain("左右");
+    expect(j.parts.find((x) => x.part.id === "from")?.hint).toBeUndefined();
+  });
+
+  it("!= は <> と意味が同じでも別の木。説明を出す（左右入れ替えでも）", () => {
+    const ne = { column: "name", op: "<>", value: "bob" } as const;
+    expect(whereIs(cast("SELECT name FROM users WHERE name != 'bob'"), ne)).toBe(false);
+    expect(hint("SELECT name FROM users WHERE name != 'bob'", ne)).toContain("このお題は <> で書く");
+    expect(hint("SELECT name FROM users WHERE 'bob' != name", ne)).toContain("左右が入れ替わった");
+  });
+
+  it("20.0 は 20 と別の木。\"20\" は名前の書き方として説明する", () => {
+    expect(whereIs(cast("SELECT * FROM users WHERE age >= 20.0"), age20)).toBe(false);
+    expect(hint("SELECT * FROM users WHERE age >= 20.0", age20)).toContain("20.0");
+    expect(hint('SELECT * FROM users WHERE age >= "20"', age20)).toContain("名前（列名など）");
+  });
+
+  it("<> の条件も一致する", () => {
+    expect(whereIs(cast("SELECT name FROM users WHERE name <> 'bob'"), { column: "name", op: "<>", value: "bob" })).toBe(true);
   });
 });
